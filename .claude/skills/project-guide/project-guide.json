@@ -1,0 +1,31 @@
+{
+  "name": "project-guide",
+  "version": "1.0.0",
+  "description": "Interactive guide for the ras-sigma-plugin-timeline-slider project",
+  "invocationPatterns": [
+    "project-guide",
+    "tell me about this project",
+    "explain this project",
+    "how does this work",
+    "project help",
+    "timeline slider guide"
+  ],
+  "examples": [
+    {
+      "input": "Tell me about this project",
+      "output": "Provides overview of the Sigma timeline slider plugin architecture and features"
+    },
+    {
+      "input": "How does the date range sync work?",
+      "output": "Explains bidirectional sync between slider handles and Sigma date control variables"
+    },
+    {
+      "input": "How do I add a new granularity level?",
+      "output": "Guides through adding a new time unit to the periods computation and UI"
+    },
+    {
+      "input": "What's the current status?",
+      "output": "Reads checkpoint.md and reports on in-progress work and next steps"
+    }
+  ]
+}
