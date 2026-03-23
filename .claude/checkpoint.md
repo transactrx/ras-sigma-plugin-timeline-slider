@@ -1,45 +1,64 @@
-# Checkpoint: CloudFront Deployment Plan
+# Checkpoint: S3 + CloudFront Deployment Setup
 
-**Date**: 2026-03-19
+**Date**: 2026-03-20
 **Branch**: `setup`
-**Status**: Plan agreed upon. Implementation not yet started.
+**Status**: Blocked on CloudFront IAM permissions — awaiting AWS team decision.
 
 ## What Was Done
 
-- Added Mac-specific entries to `.gitignore`
-- Created `.claude/` folder with project-guide skill and initial checkpoint
-- Researched existing AWS infrastructure (ras_aws_infrastructure + terraform-infrastructure)
-- Designed deployment plan for hosting Sigma plugin on S3 + CloudFront
+- Added `base: '/timeline-slider/'` to `vite.config.js` (committed)
+- Explored and rejected approach of putting Terraform in `terraform-infrastructure` repo
+- Researched org patterns: `ras_aws_infrastructure`, `data_science_airflow`, `powerlineDataWarehouse`
+- Identified GitHub Organization Secrets: `PROCESSOR_DEVELOPMENT_AWS_ROLE_ARN`, `PROCESSOR_PRODUCTION_AWS_ROLE_ARN`
 
-## Deployment Plan: S3 + CloudFront for Sigma Plugins
+## Key Decisions Made
 
-### Why a Separate Distribution
-The existing CloudFront distribution serves the main app (NLB origin, mytransactrx.io/.net domains, WAF, geo-restriction). A separate lightweight S3 + CloudFront setup is cleaner for static plugin hosting.
+1. **Terraform lives in THIS repo** (not `terraform-infrastructure`), following `ras_aws_infrastructure` pattern
+2. **Use existing org secrets** (`PROCESSOR_` prefix) instead of creating new IAM roles
+3. **S3 bucket naming**: `ras.sigma.{env}.plugins`
+4. **Geo-restriction**: US + CA
+5. **Default CloudFront domain** (no custom domain needed for Sigma)
 
-### Architecture
-- **S3 Bucket**: `transactrx-sigma-plugins-{env}` with subfolder per plugin (e.g., `timeline-slider/`)
-- **CloudFront**: New distribution with S3 origin via Origin Access Control (not public bucket)
-- **Cache Strategy**: Aggressive caching on `assets/*`, short TTL on `index.html`
-- **HTTPS**: Default CloudFront domain is sufficient for Sigma plugin registration
-- **Deploy**: GitHub Actions (OIDC auth, us-east-1) — `npm build` then `s3 sync` + CloudFront invalidation
+## Blocker: CloudFront Permissions
 
-### Open Decisions
-1. **Custom domain?** Could use `plugins.mytransactrx.net` with ACM cert, or default CloudFront URL (`d1234.cloudfront.net`). Default is fine for Sigma.
-2. **Geo-restriction?** Existing infra uses US/Canada only — apply same here?
-3. **Terraform location?** Recommendation: new module in `terraform-infrastructure` (e.g., `sigma-plugins/`)
-4. **Multi-plugin bucket?** S3 structure supports multiple plugins under one distribution, each in its own subfolder.
+The `github-actions` role (behind PROCESSOR_ org secrets) does **NOT** have `cloudfront:*` permissions.
 
-### Existing Infra Context
-- **Region**: us-east-1
-- **AWS Profiles**: Development (386128822572), Production (578577428029)
-- **Terraform State**: `transactrx-infrastructure-terraform` bucket, `terraform-lock` DynamoDB
-- **CI/CD Pattern**: GitHub Actions with OIDC role assumption, Terraform apply, Docker/ECR push
-- **Log Buckets**: `transactrx-aws-{env}-logs` with CloudFront prefix, lifecycle to GLACIER at 90 days
+### What the role HAS:
+`s3:*`, `ecr:*`, `ecs:*`, `batch:*`, `logs:*`, `ssm:Get*/Desc*`, broad IAM (CreateRole/AttachRolePolicy/PutRolePolicy), `ec2` (limited), `elasticloadbalancing:*`, `route53:*`, `ses:*`, `sns:*`, `secretsmanager:*`
 
-## Next Steps
+### What the role is MISSING:
+`cloudfront:*` — needed for Terraform to create the distribution AND for deploy workflow to run `create-invalidation`
 
-1. Decide on the four open questions above
-2. Create Terraform module in `terraform-infrastructure` for S3 bucket + CloudFront distribution + OAC
-3. Create GitHub Actions workflow in this repo for build + deploy
-4. Register the CloudFront URL as a custom plugin in Sigma
-5. Test end-to-end in Development environment before promoting to Production
+### Options for AWS Team:
+1. **Add `cloudfront:*` to the shared module** (`terraform-infrastructure/infrastructure/modules/account-github-actions-integration/permissions.tf`) — cleanest, affects all accounts
+2. **This repo's Terraform attaches a CloudFront inline policy to the existing `github-actions` role** — self-contained but modifies a shared role
+3. **Skip CloudFront entirely** — use S3 static website hosting directly (loses HTTPS/caching benefits)
+
+**Note:** Options 1 or 2 are required — Terraform needs CloudFront permissions to create the distribution.
+
+## Established Patterns (for implementation after blocker resolves)
+
+### Workflow pattern (from `ras_aws_infrastructure`):
+```yaml
+# Dynamic role: PROCESSOR_{BRANCH_UPPER}_AWS_ROLE_ARN
+# Backend from SSM: terraform_state_bucket_name, terraform_lock_table
+# terraform init -backend-config=... with dynamic values
+# terraform apply -auto-approve
+```
+
+### Terraform backend pattern:
+```hcl
+terraform {
+  backend "s3" {
+    encrypt = true
+    region  = "us-east-1"
+  }
+}
+# bucket/key/lock_table injected at init time via SSM
+```
+
+## What's Left After Blocker Resolves
+1. Create `terraform/` directory with S3 + CloudFront + OAC + bucket policy resources
+2. Create `.github/workflows/deploy.yml` using PROCESSOR_ prefix pattern
+3. `terraform apply` via GitHub Actions on push to Development
+4. Register plugin URL in Sigma: `https://{cf-domain}/timeline-slider/index.html`
