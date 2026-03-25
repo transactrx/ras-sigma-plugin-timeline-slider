@@ -22,7 +22,7 @@ jobs:
           branchUpper=$(echo ${branch^^})
 
           # AWS role ARN from secrets
-          AWS_ROLE="SIGMA_${branchUpper}_AWS_ROLE_ARN"
+          AWS_ROLE="PROCESSOR_${branchUpper}_AWS_ROLE_ARN"
           echo "AWS_ROLE=${AWS_ROLE}" >> $GITHUB_ENV
 
           # S3 bucket from variables
@@ -39,7 +39,7 @@ jobs:
           echo "PLUGIN_NAME=${PLUGIN_NAME}" >> $GITHUB_ENV
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets[env.AWS_ROLE] }}
           role-session-name: sigma-plugin-deploy
