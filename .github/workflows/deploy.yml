@@ -25,12 +25,19 @@ jobs:
           AWS_ROLE="PROCESSOR_${branchUpper}_AWS_ROLE_ARN"
           echo "AWS_ROLE=${AWS_ROLE}" >> $GITHUB_ENV
 
+          # Map branch to env prefix
+          if [ "$branch" = "Development" ]; then
+            ENV_PREFIX="DEV"
+          else
+            ENV_PREFIX="PROD"
+          fi
+
           # S3 bucket from variables
-          S3_BUCKET="SIGMA_${branchUpper}_S3_BUCKET"
+          S3_BUCKET="${ENV_PREFIX}_S3_BUCKET_NAME"
           echo "S3_BUCKET=${S3_BUCKET}" >> $GITHUB_ENV
 
           # CloudFront distribution ID from variables
-          CF_DIST="SIGMA_${branchUpper}_CLOUDFRONT_DISTRIBUTION_ID"
+          CF_DIST="${ENV_PREFIX}_CLOUDFRONT_DISTRIBUTION_ID"
           echo "CF_DIST=${CF_DIST}" >> $GITHUB_ENV
 
           # Plugin name derived from repo name (strip ras-sigma-plugin- prefix)
